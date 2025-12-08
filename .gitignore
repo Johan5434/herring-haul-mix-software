@@ -1,0 +1,4 @@
+__pycache__/
+simulations/*.vcf
+simulations/*.npz
+simulations/genomic_data.txt
