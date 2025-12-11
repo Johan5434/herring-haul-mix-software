@@ -2,3 +2,5 @@ __pycache__/
 simulations/*.vcf
 simulations/*.npz
 simulations/genomic_data.txt
+simulated_experiments/results/
+simulated_experiments/reference_model/
