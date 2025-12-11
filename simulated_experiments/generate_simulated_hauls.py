@@ -241,6 +241,93 @@ def print_summary(haul_info):
     print("="*70 + "\n")
 
 
+def run_diversity_analysis(metadata_path, proportions_path):
+    """Analyze haul diversity to ensure replicates are genetically distinct."""
+    
+    def load_haul_individuals(path):
+        """Load haul metadata and return haul -> set of sample_ids."""
+        haul_to_samples = {}
+        with open(path, 'r') as f:
+            for line in f:
+                parts = line.strip().split('\t')
+                if len(parts) >= 2:
+                    sample_id, haul_id = parts[0], parts[1]
+                    if haul_id not in haul_to_samples:
+                        haul_to_samples[haul_id] = set()
+                    haul_to_samples[haul_id].add(sample_id)
+        return haul_to_samples
+    
+    def load_proportions(path):
+        """Load haul proportions."""
+        haul_props = {}
+        with open(path, 'r') as f:
+            header = f.readline()
+            for line in f:
+                parts = line.strip().split('\t')
+                if len(parts) >= 7:
+                    haul_id = parts[0]
+                    a = int(parts[2])
+                    n = int(parts[3])
+                    c = int(parts[4])
+                    s = int(parts[5])
+                    haul_props[haul_id] = {"A": a, "N": n, "C": c, "S": s}
+        return haul_props
+    
+    # Load data
+    haul_to_samples = load_haul_individuals(metadata_path)
+    haul_props = load_proportions(proportions_path)
+    
+    # Group hauls by proportion type
+    prop_groups = {}
+    for haul_id in haul_to_samples.keys():
+        if haul_id not in haul_props:
+            continue
+        props = haul_props[haul_id]
+        prop_key = f"A{props['A']:03d}_N{props['N']:03d}_C{props['C']:03d}_S{props['S']:03d}"
+        if prop_key not in prop_groups:
+            prop_groups[prop_key] = []
+        prop_groups[prop_key].append(haul_id)
+    
+    # Analyze each proportion group
+    print("\nHAUL DIVERSITY ANALYSIS (Individual-level)")
+    print("-" * 70)
+    
+    all_distinct = True
+    for prop_key in sorted(prop_groups.keys()):
+        haul_ids = sorted(prop_groups[prop_key])
+        
+        if len(haul_ids) < 2:
+            continue
+        
+        # Get individuals for each haul
+        haul_sample_sets = {haul_id: haul_to_samples[haul_id] for haul_id in haul_ids}
+        
+        # Compute pairwise overlap
+        overlaps = []
+        for i in range(len(haul_ids)):
+            for j in range(i + 1, len(haul_ids)):
+                haul_i = haul_ids[i]
+                haul_j = haul_ids[j]
+                samples_i = haul_sample_sets[haul_i]
+                samples_j = haul_sample_sets[haul_j]
+                overlap = len(samples_i & samples_j)
+                overlaps.append(overlap)
+        
+        if overlaps:
+            mean_overlap = sum(overlaps) / len(overlaps)
+            is_distinct = mean_overlap < 30
+            all_distinct = all_distinct and is_distinct
+            
+            status = "✓ DISTINCT" if is_distinct else "⚠️  IDENTICAL"
+            print(f"{prop_key}: {status} (avg {mean_overlap:.1f} shared individuals)")
+    
+    print("-" * 70)
+    if all_distinct:
+        print("✓ Haul diversity validation PASSED")
+    else:
+        print("⚠️  WARNING: Some hauls have identical individuals")
+
+
 def main():
     """Main entry point."""
     # Paths
@@ -270,10 +357,19 @@ def main():
     
     # Define proportions (you can modify this as needed)
     proportions_list = [
+        {"Autumn": 100, "North": 0, "Central": 0, "South": 0},    # 100 Autumn
+        {"Autumn": 0, "North": 100, "Central": 0, "South": 0},    # 100 Spring (North)
+        {"Autumn": 0, "North": 0, "Central": 100, "South": 0},    # 100 Spring (Central)
+        {"Autumn": 0, "North": 0, "Central": 0, "South": 100},    # 100 Spring (South)
+        {"Autumn": 0, "North": 33, "Central": 33, "South": 34},    # 100 Spring (Equal mix)
         {"Autumn": 50, "North": 0, "Central": 0, "South": 50},    # 50/50 Autumn-South
         {"Autumn": 50, "North": 50, "Central": 0, "South": 0},    # 50/50 Autumn-North
         {"Autumn": 50, "North": 0, "Central": 50, "South": 0},    # 50/50 Autumn-Central
-        {"Autumn": 50, "North": 16, "Central": 17, "South": 17},    # 50/50 Autumn-Spring mix
+        {"Autumn": 50, "North": 16, "Central": 17, "South": 17},    # 50/50 Autumn-Spring (mixed)
+        {"Autumn": 10, "North": 0, "Central": 0, "South": 90},    # 10/90 Spring (South)
+        {"Autumn": 10, "North": 90, "Central": 0, "South": 0},    # 10/90 Spring (North)
+        {"Autumn": 10, "North": 0, "Central": 90, "South": 0},    # 10/90 Spring (Central)
+        {"Autumn": 10, "North": 30, "Central": 30, "South": 30},    # 10/90 Spring (Mixed)
         {"Autumn": 60, "North": 40, "Central": 0, "South": 0},    # 60/40 Autumn-North
         {"Autumn": 0, "North": 50, "Central": 50, "South": 0},    # 50/50 North-Central
         {"Autumn": 33, "North": 33, "Central": 33, "South": 0},   # 33/33/33 A-N-C (approx)
@@ -296,6 +392,12 @@ def main():
     write_individuals_list(haul_info, individuals_out)
     
     print_summary(haul_info)
+    
+    # Run diversity analysis
+    print("\n" + "="*70)
+    print("Running haul diversity analysis...")
+    print("="*70)
+    run_diversity_analysis(metadata_out, proportions_out)
 
 
 if __name__ == "__main__":

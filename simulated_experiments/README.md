@@ -6,6 +6,32 @@ This folder contains simulated herring hauls with **known population proportions
 
 The goal is to create synthetic hauls by mixing individuals from different populations at specified proportions, then use the pipeline to see how accurately it can recover the true population assignments.
 
+## Quick Start
+
+### One-Time Setup: Build Reference Model
+
+```bash
+# Build reference PCA model from empirical data (with QC filtering)
+python build_reference_model.py --apply-qc
+
+# This creates: reference_model/reference_pca.json
+```
+
+### Testing Simulated Hauls
+
+```bash
+# Test hauls 1-15
+python test_simulated_hauls.py --hauls 1-15
+
+# Test hauls 16-30
+python test_simulated_hauls.py --hauls 16-30
+
+# Test specific hauls
+python test_simulated_hauls.py --hauls 1,5,10-20
+
+# Results saved to: results/predictions_XXXX-XXXX_timestamp.csv
+```
+
 ## Files Generated
 
 ### Core Output Files
@@ -54,6 +80,95 @@ The goal is to create synthetic hauls by mixing individuals from different popul
 | haul_0041–0050 | 25% each population (equal 4-way)  | 10         |
 
 Each haul contains **30 individuals** sampled randomly from the specified populations.
+
+## Complete Workflow
+
+### Step 1: Generate Simulated Hauls (One-Time Setup)
+
+#### 1a. (Optional) QC Filter Individuals
+
+```bash
+# Filter out outliers before haul generation
+python qc_before_simulation.py
+# → Creates qc_passed_individuals.txt (4,487 individuals)
+```
+
+#### 1b. Generate Hauls
+
+```bash
+# Creates simulated hauls from QC-passed individuals
+python generate_simulated_hauls.py
+# → Creates simulated_hauls_metadata.txt (80 hauls)
+# → Creates haul_proportions.txt (ground truth)
+```
+
+### Step 2: Build Reference Model (One-Time Setup)
+
+```bash
+# Build PCA reference from empirical/original data
+python build_reference_model.py --apply-qc
+
+# Output: reference_model/reference_pca.json
+```
+
+**What it does:**
+
+- Loads original VCF + metadata (all 4,647 empirical individuals)
+- Applies QC filters (removes ~160 outliers)
+- Builds individual PCA on empirical hauls
+- Computes haul centroids (reference map)
+- Saves model as JSON (human-readable)
+
+**Do this ONCE** - the reference model is reused for all testing.
+
+### Step 3: Test Simulated Hauls (Run Multiple Times)
+
+```bash
+# Test different batches of hauls
+python test_simulated_hauls.py --hauls 1-15
+python test_simulated_hauls.py --hauls 16-30
+python test_simulated_hauls.py --hauls 31-45
+
+# Each run creates: results/predictions_XXXX-XXXX_timestamp.csv
+```
+
+**What it does:**
+
+- Loads reference model (pre-built PCA)
+- Loads specified simulated hauls from metadata
+- Projects simulated individuals to PCA space
+- Computes haul centroids
+- Classifies using rule-based method
+- Compares predictions vs ground truth
+- Outputs CSV with true/pred proportions + errors
+
+**Run this many times** with different haul ranges to test all scenarios.
+
+---
+
+## Directory Structure
+
+After running the full workflow:
+
+```
+simulated_experiments/
+├── reference_model/              # Reference PCA (built once)
+│   └── reference_pca.json        # PCA parameters + centroids
+├── results/                      # Test results (one per run)
+│   ├── predictions_0001-0015_20241211_143022.csv
+│   ├── predictions_0016-0030_20241211_143145.csv
+│   └── ...
+├── simulated_hauls_metadata.txt  # Simulated haul assignments
+├── haul_proportions.txt          # Ground truth proportions
+├── qc_passed_individuals.txt     # QC-filtered individuals
+├── build_reference_model.py      # Script: build reference
+├── test_simulated_hauls.py       # Script: test hauls
+├── generate_simulated_hauls.py   # Script: generate hauls
+├── qc_before_simulation.py       # Script: QC filtering
+└── README.md                     # This file
+```
+
+---
 
 ## QC Filtering (Optional)
 
