@@ -31,11 +31,15 @@ def load_metadata(metadata_path):
     return sample_to_pop
 
 
-def get_individuals_per_population(sample_to_pop):
+def get_individuals_per_population(sample_to_pop, qc_passed_filter=None):
     """
     Return a dict: population -> list of sample_ids.
     Populations: Autumn, North, Central, South.
+    
+    If qc_passed_filter is provided (list of sample IDs), only use those individuals.
     """
+    qc_set = set(qc_passed_filter) if qc_passed_filter else None
+    
     pop_to_samples = {
         "Autumn": [],
         "North": [],
@@ -43,6 +47,9 @@ def get_individuals_per_population(sample_to_pop):
         "South": []
     }
     for sample_id, pop in sample_to_pop.items():
+        # Filter by QC-passed if provided
+        if qc_set and sample_id not in qc_set:
+            continue
         if pop in pop_to_samples:
             pop_to_samples[pop].append(sample_id)
     return pop_to_samples
@@ -85,7 +92,8 @@ def generate_hauls(
     proportions_list,
     n_replicates=10,
     n_individuals=30,
-    seed=42
+    seed=42,
+    qc_passed_filter=None
 ):
     """
     Generate simulated hauls based on proportions.
@@ -100,6 +108,8 @@ def generate_hauls(
       n_replicates: number of independent hauls per proportion (10)
       n_individuals: individuals per haul (30)
       seed: random seed for reproducibility
+      qc_passed_filter: optional list of sample IDs that passed QC. If provided,
+                        only these individuals will be used in hauls.
       
     Returns:
       haul_info: list of dicts with keys:
@@ -110,7 +120,7 @@ def generate_hauls(
         - sample_ids: list of sample_ids in this haul
     """
     rng = np.random.default_rng(seed)
-    pop_to_samples = get_individuals_per_population(sample_to_pop)
+    pop_to_samples = get_individuals_per_population(sample_to_pop, qc_passed_filter)
     
     haul_info = []
     haul_counter = 1
@@ -235,6 +245,7 @@ def main():
     """Main entry point."""
     # Paths
     original_metadata_path = "../simulations/All_Sample_Metadata.txt"
+    qc_passed_path = "./qc_passed_individuals.txt"
     output_dir = "./"
     metadata_out = os.path.join(output_dir, "simulated_hauls_metadata.txt")
     proportions_out = os.path.join(output_dir, "haul_proportions.txt")
@@ -243,6 +254,19 @@ def main():
     print("Loading original metadata...")
     sample_to_pop = load_metadata(original_metadata_path)
     print(f"  Loaded {len(sample_to_pop)} individuals")
+    
+    # Check if QC-passed individuals list exists
+    qc_passed_filter = None
+    if os.path.exists(qc_passed_path):
+        print(f"\nLoading QC-passed individuals from {qc_passed_path}...")
+        with open(qc_passed_path, 'r') as f:
+            qc_passed_filter = [line.strip() for line in f if line.strip()]
+        print(f"  Loaded {len(qc_passed_filter)} QC-passed individuals")
+        print("  (Will use only these individuals in simulated hauls)")
+    else:
+        print(f"\nNote: {qc_passed_path} not found.")
+        print("  Using all available individuals for simulated hauls.")
+        print("  (Tip: Run qc_before_simulation.py first to QC-filter individuals)")
     
     # Define proportions (you can modify this as needed)
     proportions_list = [
@@ -262,7 +286,8 @@ def main():
         proportions_list,
         n_replicates=10,
         n_individuals=30,
-        seed=42
+        seed=42,
+        qc_passed_filter=qc_passed_filter
     )
     
     print(f"\nWriting output files...")
