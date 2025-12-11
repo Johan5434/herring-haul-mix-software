@@ -2,95 +2,174 @@
 """
 build_reference_model.py
 
-DOCUMENTATION SCRIPT: Explains how the reference PCA model was built.
+Rebuild the reference PCA model from the original empirical hauls.
+This includes:
+  1. Load all individuals from the original VCF
+  2. Build PCA from all individuals
+  3. Calculate haul centroids for ALL empirical hauls
+  4. Save reference model with empirical haul data
 
-The reference model (in reference_model/) is pre-built and contains:
-  - reference_pca.json: PCA components and haul centroids from original herring hauls
-  - spring_pca.json: Spring-specific PCA model for N/C/S classification
-
-WORKFLOW:
-1. Load original genotype data from Bioinformatics_Course_2025_Herring_Sample_Subset.vcf
-2. Compute PCA (3 components) on all individuals
-3. Project all original hauls to PCA space
-4. Compute centroids for each haul in PC space
-5. Save PCA parameters and centroids to reference_pca.json
-6. Build Spring-specific PCA from reference PCA
-7. Save Spring PCA to spring_pca.json
-
-The reference model is used by:
-  - test_simulated_hauls.py: Load it and use centroids for classification
-  - Haul distance-based classification: Compare simulated haul centroids to reference centroids
-  
-NOTE: This script is for reference/documentation. The actual reference model already exists
-and is loaded by test_simulated_hauls.py. To rebuild it from scratch, you would need to
-modify the imports and PCA building logic based on the existing test_simulated_hauls.py
-implementation.
+Run this whenever you want to rebuild the reference from scratch.
 """
 
+import sys
 import os
 import json
+import numpy as np
+import pandas as pd
+from datetime import datetime
 
-def show_reference_model_info():
-    """Display info about the existing reference model."""
-    ref_dir = "./reference_model"
+# Add parent directory to path
+sys.path.insert(0, os.path.abspath("../simulations"))
+
+from data_loading import genotype_matrix
+from pca_hauls import project_individuals_to_PCs
+
+
+def build_reference_model_from_empirical(vcf_file, metadata_file, output_dir="reference_model"):
+    """
+    Build reference PCA model from empirical hauls.
     
-    print("=" * 70)
-    print("REFERENCE PCA MODEL INFORMATION")
-    print("=" * 70)
+    Args:
+        vcf_file: Path to VCF file with original data
+        metadata_file: Path to metadata file with haul assignments
+        output_dir: Where to save the model
+    """
     
-    # Check files exist
-    pca_file = os.path.join(ref_dir, "reference_pca.json")
-    spring_file = os.path.join(ref_dir, "spring_pca.json")
+    print("="*80)
+    print("BUILDING REFERENCE PCA MODEL FROM EMPIRICAL HAULS")
+    print("="*80)
     
-    if not os.path.exists(pca_file):
-        print(f"\n✗ Reference PCA model not found at {pca_file}")
-        print(f"  The model should be pre-built in the {ref_dir}/ directory")
-        return
+    # Load data
+    print("\n1. Loading empirical data...")
+    G_tuple = genotype_matrix(vcf_file)
+    # genotype_matrix returns (genotypes, sample_ids)
+    if isinstance(G_tuple, tuple):
+        G, sample_ids = G_tuple
+    else:
+        G = G_tuple
     
-    print(f"\n✓ Found reference model files:")
-    print(f"  {pca_file}")
-    print(f"  {spring_file}")
+    metadata = pd.read_csv(metadata_file, sep="\t")
     
-    # Load and display info
-    with open(pca_file, 'r') as f:
-        ref_pca = json.load(f)
+    print(f"   ✓ Loaded genotypes: {G.shape[0]} samples × {G.shape[1]} SNPs")
+    print(f"   ✓ Loaded metadata: {len(metadata)} samples")
     
-    print(f"\nReference PCA Statistics:")
-    print(f"  Number of hauls: {len(ref_pca.get('haul_ids', []))}")
-    print(f"  Number of SNPs: {len(ref_pca.get('valid_snps', []))}")
+    # Build PCA from all individuals
+    print("\n2. Building PCA from all individuals...")
+    from sklearn.preprocessing import StandardScaler
+    from sklearn.decomposition import PCA
     
-    if 'explained_var_ratio' in ref_pca:
-        var_ratio = ref_pca['explained_var_ratio']
-        print(f"\nExplained Variance Ratio:")
-        print(f"  PC1: {var_ratio[0]*100:.2f}%")
-        print(f"  PC2: {var_ratio[1]*100:.2f}%")
-        print(f"  PC3: {var_ratio[2]*100:.2f}%")
-        print(f"  Total: {sum(var_ratio)*100:.2f}%")
+    # Standardize genotypes
+    scaler = StandardScaler()
+    G_scaled = scaler.fit_transform(G)
     
-    if 'haul_ids' in ref_pca and 'haul_pops' in ref_pca:
-        print(f"\nHaul Populations:")
-        pop_counts = {}
-        for pop in ref_pca['haul_pops']:
-            pop_counts[pop] = pop_counts.get(pop, 0) + 1
-        for pop in sorted(pop_counts.keys()):
-            print(f"  {pop}: {pop_counts[pop]} hauls")
+    # Build PCA
+    pca_model = PCA(n_components=3)
+    G_pca = pca_model.fit_transform(G_scaled)
     
-    if os.path.exists(spring_file):
-        with open(spring_file, 'r') as f:
-            spring_pca = json.load(f)
+    print(f"   ✓ Explained variance: PC1={pca_model.explained_variance_ratio_[0]*100:.2f}%, "
+          f"PC2={pca_model.explained_variance_ratio_[1]*100:.2f}%, "
+          f"PC3={pca_model.explained_variance_ratio_[2]*100:.2f}%")
+    print(f"   ✓ Total: {pca_model.explained_variance_ratio_.sum()*100:.2f}%")
+    
+    # Calculate haul centroids
+    print("\n3. Calculating empirical haul centroids...")
+    haul_centroids = {}
+    haul_pops = {}
+    valid_hauls = []
+    
+    for haul_id in metadata["Capture_Population"].unique():
+        if haul_id == "Capture_Population":  # Skip header if present
+            continue
         
-        print(f"\nSpring PCA Statistics:")
-        if 'centroids' in spring_pca:
-            print(f"  Spring population centroids: {len(spring_pca['centroids'])} populations")
+        haul_mask = metadata["Capture_Population"] == haul_id
+        haul_indices = np.where(haul_mask)[0]
+        
+        if len(haul_indices) > 0:
+            centroid = G_pca[haul_indices].mean(axis=0)
+            haul_centroids[haul_id] = centroid
+            
+            # Get population for this haul
+            pop = metadata[haul_mask]["Population"].iloc[0]
+            haul_pops[haul_id] = pop
+            valid_hauls.append(haul_id)
     
-    print("\n" + "=" * 70)
-    print("USE IN test_simulated_hauls.py:")
-    print("  load_reference_model() - loads and returns the reference PCA")
-    print("  load_spring_pca() - loads the Spring-specific PCA")
-    print("=" * 70 + "\n")
+    print(f"   ✓ Calculated centroids for {len(valid_hauls)} empirical hauls")
+    print(f"   Populations: Autumn={sum(1 for p in haul_pops.values() if p=='Autumn')}, "
+          f"North={sum(1 for p in haul_pops.values() if p=='North')}, "
+          f"Central={sum(1 for p in haul_pops.values() if p=='Central')}, "
+          f"South={sum(1 for p in haul_pops.values() if p=='South')}")
+    
+    # Prepare model data
+    print("\n4. Preparing model data...")
+    
+    # Get PCA parameters
+    mean_snps = scaler.mean_
+    std_snps = scaler.scale_
+    
+    # Get valid SNPs (those not all zeros)
+    valid_snps = (std_snps > 0).astype(bool)
+    
+    # Prepare centroids array
+    centroid_array = np.array([haul_centroids[hid] for hid in valid_hauls])
+    haul_pops_array = np.array([haul_pops[hid] for hid in valid_hauls])
+    
+    # Create reference model
+    ref_model = {
+        "mean_snps": mean_snps.tolist(),
+        "std_snps": std_snps.tolist(),
+        "valid_snps": valid_snps.tolist(),
+        "components": pca_model.components_.tolist(),
+        "explained_var_ratio": pca_model.explained_variance_ratio_.tolist(),
+        "centroids": centroid_array.tolist(),
+        "haul_ids": valid_hauls,
+        "haul_pops": haul_pops_array.tolist(),
+    }
+    
+    # Save model
+    print("\n5. Saving reference model...")
+    os.makedirs(output_dir, exist_ok=True)
+    
+    model_path = os.path.join(output_dir, "reference_pca.json")
+    with open(model_path, 'w') as f:
+        json.dump(ref_model, f, indent=2)
+    
+    print(f"   ✓ Saved to {model_path}")
+    
+    # Summary
+    print("\n" + "="*80)
+    print("REFERENCE MODEL SUMMARY")
+    print("="*80)
+    print(f"Number of empirical hauls: {len(valid_hauls)}")
+    print(f"Number of SNPs: {G.shape[1]}")
+    print(f"PCA components: 3")
+    print(f"Total explained variance: {pca_model.explained_variance_ratio_.sum()*100:.2f}%")
+    print(f"Model file: {model_path}")
+    print("="*80)
+    
+    return ref_model
 
 
 if __name__ == "__main__":
-    show_reference_model_info()
-
-
+    # Change to simulations directory so genotype_matrix can find metadata
+    sim_dir = os.path.abspath("../simulations")
+    vcf_file = os.path.join(sim_dir, "Bioinformatics_Course_2025_Herring_Sample_Subset.vcf")
+    metadata_file = os.path.join(sim_dir, "All_Sample_Metadata.txt")
+    
+    if not os.path.exists(vcf_file):
+        print(f"Error: VCF file not found: {vcf_file}")
+        sys.exit(1)
+    
+    if not os.path.exists(metadata_file):
+        print(f"Error: Metadata file not found: {metadata_file}")
+        sys.exit(1)
+    
+    # Change working directory to simulations so genotype_matrix finds metadata
+    orig_dir = os.getcwd()
+    os.chdir(sim_dir)
+    
+    try:
+        build_reference_model_from_empirical(vcf_file, metadata_file, 
+                                            output_dir=os.path.join(orig_dir, "reference_model"))
+    finally:
+        os.chdir(orig_dir)
