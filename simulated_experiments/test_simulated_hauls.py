@@ -650,11 +650,6 @@ def plot_pca_with_hauls(ref_pca, haul_centroids, ground_truth, haul_ids, output_
     # Compute population centroids (N/C/S)
     pop_to_centroid = compute_population_centroids(ref_pca)
     
-    # Import the distance threshold from classification
-    import sys
-    sys.path.insert(0, os.path.abspath("../simulations"))
-    from classification import PURE_DISTANCE_THRESHOLD
-    
     # Define colors for each population
     pop_colors = {
         "Autumn": "#FF6B35",      # Orange-red
@@ -665,14 +660,6 @@ def plot_pca_with_hauls(ref_pca, haul_centroids, ground_truth, haul_ids, output_
     
     # ===== SUBPLOT 1: PC1 vs PC2 =====
     ax = axes[0]
-    
-    # Plot distance threshold circles around season centroids
-    for season in ["Autumn", "Spring"]:
-        centroid = season_to_centroid[season]
-        circle = plt.Circle((centroid[0], centroid[1]), PURE_DISTANCE_THRESHOLD, 
-                           color='gray', fill=False, linestyle='--', linewidth=1.5, 
-                           alpha=0.5, label=f"100% threshold" if season == "Autumn" else "")
-        ax.add_patch(circle)
     
     # Plot reference hauls
     for pop in ["Autumn", "North", "Central", "South"]:
@@ -701,7 +688,7 @@ def plot_pca_with_hauls(ref_pca, haul_centroids, ground_truth, haul_ids, output_
     
     ax.set_xlabel(f"PC1 ({ref_pca['explained_var_ratio'][0]*100:.1f}%)", fontsize=12)
     ax.set_ylabel(f"PC2 ({ref_pca['explained_var_ratio'][1]*100:.1f}%)", fontsize=12)
-    ax.set_title(f"Ref Hauls (circles), Centroids (stars), 100% zones (dashed), Simulated (X)", fontsize=12)
+    ax.set_title(f"Ref Hauls (circles), Centroids (stars), Simulated (X)", fontsize=12)
     ax.grid(True, alpha=0.3)
     
     # Legend
@@ -709,14 +696,6 @@ def plot_pca_with_hauls(ref_pca, haul_centroids, ground_truth, haul_ids, output_
     
     # ===== SUBPLOT 2: PC1 vs PC3 =====
     ax = axes[1]
-    
-    # Plot distance threshold circles around season centroids
-    for season in ["Autumn", "Spring"]:
-        centroid = season_to_centroid[season]
-        circle = plt.Circle((centroid[0], centroid[2]), PURE_DISTANCE_THRESHOLD, 
-                           color='gray', fill=False, linestyle='--', linewidth=1.5, 
-                           alpha=0.5, label=f"100% threshold" if season == "Autumn" else "")
-        ax.add_patch(circle)
     
     # Plot reference hauls
     for pop in ["Autumn", "North", "Central", "South"]:
@@ -745,7 +724,7 @@ def plot_pca_with_hauls(ref_pca, haul_centroids, ground_truth, haul_ids, output_
     
     ax.set_xlabel(f"PC1 ({ref_pca['explained_var_ratio'][0]*100:.1f}%)", fontsize=12)
     ax.set_ylabel(f"PC3 ({ref_pca['explained_var_ratio'][2]*100:.1f}%)", fontsize=12)
-    ax.set_title(f"Ref Hauls (circles), Centroids (stars), 100% zones (dashed), Simulated (X)", fontsize=12)
+    ax.set_title(f"Ref Hauls (circles), Centroids (stars), Simulated (X)", fontsize=12)
     ax.grid(True, alpha=0.3)
     
     plt.tight_layout()

@@ -384,26 +384,11 @@ def rule_step1_autumn_vs_spring(pc, season_to_centroid):
     dA = dists["Autumn"]
     dS = dists["Spring"]
 
-    # CHECK DISTANCE THRESHOLD: If very close to a pure centroid, classify as 100%
-    if dA < PURE_DISTANCE_THRESHOLD:
-        # Very close to Autumn centroid - classify as 100% Autumn
-        pred_perc = {"Autumn": 100, "Spring": 0}
-        major_season = "Autumn"
-        mixed = False
-        r = 0.0
-    elif dS < PURE_DISTANCE_THRESHOLD:
-        # Very close to Spring centroid - classify as 100% Spring
-        pred_perc = {"Autumn": 0, "Spring": 100}
-        major_season = "Spring"
-        mixed = False
-        r = 999.0  # Large ratio indicates far from Autumn
-    else:
-        # Use ratio-based classification
-        r = _autumn_spring_ratio(dA, dS)
-        pred_perc = _apply_rule_table_for_ratio(r, AUTUMN_SPRING_RULE_TABLE)
-        major_season = max(pred_perc, key=pred_perc.get)
-        max_frac = pred_perc[major_season] / 100.0
-        mixed = max_frac < PURE_THRESHOLD_SEASON
+    r = _autumn_spring_ratio(dA, dS)
+    pred_perc = _apply_rule_table_for_ratio(r, AUTUMN_SPRING_RULE_TABLE)
+    major_season = max(pred_perc, key=pred_perc.get)
+    max_frac = pred_perc[major_season] / 100.0
+    mixed = max_frac < PURE_THRESHOLD_SEASON
 
     return {
         "pred_season_perc": pred_perc,
