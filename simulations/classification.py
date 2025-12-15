@@ -6,10 +6,10 @@ from pca_hauls import build_spring_pca_from_ref, project_individuals_to_PCs
 #  CONFIGURABLE CONSTANTS
 # ===========================
 
-SPRING_CLASSIFICATION_DIMS = (0, 1, 2)
+SPRING_CLASSIFICATION_DIMS = (0, 1)  # Step 2 (N/C/S): Use 2 PCs (PC1, PC2)
 PURE_THRESHOLD_SEASON = 0.90
 PURE_THRESHOLD_SPRING = 0.90
-DISTANCE_DIMS = (0, 1)
+DISTANCE_DIMS = (0, 1)  # Step 1 (A/S): Use 2 PCs (PC1, PC2)
 
 # Distance threshold for 100% pure classification
 # If a haul is within this distance of a pure population centroid, classify as 100% that population

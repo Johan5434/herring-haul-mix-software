@@ -675,16 +675,19 @@ def plot_pca_with_hauls(ref_pca, haul_centroids, ground_truth, haul_ids, output_
                   alpha=1.0, marker='*', edgecolors='black', linewidth=2,
                   label=f"{pop} centroid", zorder=10)
     
-    # Plot simulated hauls
+    # Plot Spring centroid (merged N+C+S, used in Step 1)
+    spring_centroid = season_to_centroid["Spring"]
+    ax.scatter(spring_centroid[0], spring_centroid[1], c='#2ECC71', s=400, 
+              alpha=1.0, marker='*', edgecolors='black', linewidth=2.5,
+              label="Spring centroid (Step 1)", zorder=11)
+    
+    # Plot simulated hauls (all in same distinct color)
+    first_sim = True
     for haul_id, centroid in haul_centroids.items():
-        true = ground_truth[haul_id]
-        true_pop = "Autumn" if true["Autumn"] >= 50 else (
-            "North" if true["North"] >= 50 else (
-                "Central" if true["Central"] >= 50 else "South"
-            )
-        )
-        ax.scatter(centroid[0], centroid[1], c=pop_colors[true_pop], s=50, 
-                  alpha=0.9, marker='X', edgecolors='black', linewidth=0.8)
+        label = "Simulated hauls" if first_sim else None
+        ax.scatter(centroid[0], centroid[1], c='#9B59B6', s=50, 
+                  alpha=0.9, marker='X', edgecolors='black', linewidth=0.8, label=label)
+        first_sim = False
     
     ax.set_xlabel(f"PC1 ({ref_pca['explained_var_ratio'][0]*100:.1f}%)", fontsize=12)
     ax.set_ylabel(f"PC2 ({ref_pca['explained_var_ratio'][1]*100:.1f}%)", fontsize=12)
@@ -711,16 +714,19 @@ def plot_pca_with_hauls(ref_pca, haul_centroids, ground_truth, haul_ids, output_
                   alpha=1.0, marker='*', edgecolors='black', linewidth=2,
                   label=f"{pop} centroid", zorder=10)
     
-    # Plot simulated hauls
+    # Plot Spring centroid (merged N+C+S, used in Step 1)
+    spring_centroid = season_to_centroid["Spring"]
+    ax.scatter(spring_centroid[0], spring_centroid[2], c='#2ECC71', s=400, 
+              alpha=1.0, marker='*', edgecolors='black', linewidth=2.5,
+              label="Spring centroid (Step 1)", zorder=11)
+    
+    # Plot simulated hauls (all in same distinct color)
+    first_sim = True
     for haul_id, centroid in haul_centroids.items():
-        true = ground_truth[haul_id]
-        true_pop = "Autumn" if true["Autumn"] >= 50 else (
-            "North" if true["North"] >= 50 else (
-                "Central" if true["Central"] >= 50 else "South"
-            )
-        )
-        ax.scatter(centroid[0], centroid[2], c=pop_colors[true_pop], s=50, 
-                  alpha=0.9, marker='X', edgecolors='black', linewidth=0.8)
+        label = "Simulated hauls" if first_sim else None
+        ax.scatter(centroid[0], centroid[2], c='#9B59B6', s=50, 
+                  alpha=0.9, marker='X', edgecolors='black', linewidth=0.8, label=label)
+        first_sim = False
     
     ax.set_xlabel(f"PC1 ({ref_pca['explained_var_ratio'][0]*100:.1f}%)", fontsize=12)
     ax.set_ylabel(f"PC3 ({ref_pca['explained_var_ratio'][2]*100:.1f}%)", fontsize=12)
