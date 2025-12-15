@@ -24,6 +24,7 @@ import json
 import numpy as np
 import argparse
 from datetime import datetime
+import csv
 import matplotlib.pyplot as plt
 from matplotlib.patches import Patch
 
@@ -150,6 +151,86 @@ def parse_haul_range(haul_spec):
             haul_ids.append(f"haul_{num:04d}")
     
     return haul_ids
+
+
+def _read_proportions_rows(proportions_file):
+    """
+    Read rows from haul_proportions (txt/tsv or csv) and return
+    a list of tuples: (haul_num:int, haul_id:str, A:int, N:int, C:int, S:int)
+    """
+    rows = []
+    # Try TSV first (default file)
+    if proportions_file.endswith('.txt'):
+        with open(proportions_file, 'r') as f:
+            header = f.readline()
+            for line in f:
+                parts = line.strip().split('\t')
+                if len(parts) < 6:
+                    continue
+                hid = parts[0]
+                try:
+                    hnum = int(hid.split('_')[1])
+                except Exception:
+                    continue
+                A = int(parts[2]); N = int(parts[3]); C = int(parts[4]); S = int(parts[5])
+                rows.append((hnum, hid, A, N, C, S))
+    else:
+        # CSV fallback
+        with open(proportions_file, 'r', newline='') as f:
+            reader = csv.DictReader(f)
+            for r in reader:
+                hid = r.get('haul_id')
+                if not hid:
+                    continue
+                try:
+                    hnum = int(hid.split('_')[1])
+                except Exception:
+                    continue
+                A = int(r['Autumn_%']); N = int(r['North_%']); C = int(r['Central_%']); S = int(r['South_%'])
+                rows.append((hnum, hid, A, N, C, S))
+    rows.sort(key=lambda x: x[0])
+    return rows
+
+
+def print_haul_group_summary(proportions_file):
+    """
+    Print grouped haul ranges by identical A/N/C/S composition.
+    Example output:
+    * hauls 1–10: 100A / 0N / 0C / 0S
+    """
+    rows = _read_proportions_rows(proportions_file)
+    if not rows:
+        print("(No haul proportions found to summarize)")
+        return
+
+    # Group consecutive hauls with same (A,N,C,S)
+    groups = []
+    start = rows[0][0]
+    prev = rows[0]
+    for cur in rows[1:]:
+        contiguous = (cur[0] == prev[0] + 1)
+        same_comp = (cur[2], cur[3], cur[4], cur[5]) == (prev[2], prev[3], prev[4], prev[5])
+        if not (contiguous and same_comp):
+            groups.append((start, prev[0], prev[2], prev[3], prev[4], prev[5]))
+            start = cur[0]
+        prev = cur
+    # close last group
+    groups.append((start, prev[0], prev[2], prev[3], prev[4], prev[5]))
+
+    print("\nAVAILABLE SIMULATED HAUL SETS:")
+    print("-" * 80)
+    for (gstart, gend, A, N, C, S) in groups:
+        if gstart == gend:
+            span = f"{gstart}"
+        else:
+            span = f"{gstart}–{gend}"
+        print(f"* hauls {span}: {A}A / {N}N / {C}C / {S}S")
+    print("-" * 80)
+
+
+def get_all_haul_ids_from_proportions(proportions_file):
+    rows = _read_proportions_rows(proportions_file)
+    return [hid for (_, hid, *_rest) in rows]
 
 
 def load_ground_truth_proportions(proportions_file="haul_proportions.txt"):
@@ -658,26 +739,26 @@ def plot_pca_with_hauls(ref_pca, haul_centroids, ground_truth, haul_ids, output_
         "South": "#F7DC6F"        # Yellow
     }
     
-    # ===== SUBPLOT 1: PC1 vs PC2 =====
+    # ===== SUBPLOT 1: PC2 vs PC1 =====
     ax = axes[0]
     
     # Plot reference hauls
     for pop in ["Autumn", "North", "Central", "South"]:
         mask = ref_pops == pop
-        ax.scatter(ref_centroids[mask, 0], ref_centroids[mask, 1], 
+        ax.scatter(ref_centroids[mask, 1], ref_centroids[mask, 0], 
                   c=pop_colors[pop], s=100, alpha=0.6, label=f"Ref {pop}", 
                   marker='o', edgecolors='black', linewidth=0.5)
     
     # Plot population centroids (used for classification)
     for pop in ["Autumn", "North", "Central", "South"]:
         centroid = pop_to_centroid[pop]
-        ax.scatter(centroid[0], centroid[1], c=pop_colors[pop], s=300, 
+        ax.scatter(centroid[1], centroid[0], c=pop_colors[pop], s=300, 
                   alpha=1.0, marker='*', edgecolors='black', linewidth=2,
                   label=f"{pop} centroid", zorder=10)
     
     # Plot Spring centroid (merged N+C+S, used in Step 1)
     spring_centroid = season_to_centroid["Spring"]
-    ax.scatter(spring_centroid[0], spring_centroid[1], c='#2ECC71', s=400, 
+    ax.scatter(spring_centroid[1], spring_centroid[0], c='#2ECC71', s=400, 
               alpha=1.0, marker='*', edgecolors='black', linewidth=2.5,
               label="Spring centroid (Step 1)", zorder=11)
     
@@ -685,38 +766,38 @@ def plot_pca_with_hauls(ref_pca, haul_centroids, ground_truth, haul_ids, output_
     first_sim = True
     for haul_id, centroid in haul_centroids.items():
         label = "Simulated hauls" if first_sim else None
-        ax.scatter(centroid[0], centroid[1], c='#9B59B6', s=50, 
+        ax.scatter(centroid[1], centroid[0], c='#9B59B6', s=50, 
                   alpha=0.9, marker='X', edgecolors='black', linewidth=0.8, label=label)
         first_sim = False
     
-    ax.set_xlabel(f"PC1 ({ref_pca['explained_var_ratio'][0]*100:.1f}%)", fontsize=12)
-    ax.set_ylabel(f"PC2 ({ref_pca['explained_var_ratio'][1]*100:.1f}%)", fontsize=12)
+    ax.set_xlabel(f"PC2 ({ref_pca['explained_var_ratio'][1]*100:.1f}%)", fontsize=12)
+    ax.set_ylabel(f"PC1 ({ref_pca['explained_var_ratio'][0]*100:.1f}%)", fontsize=12)
     ax.set_title(f"Ref Hauls (circles), Centroids (stars), Simulated (X)", fontsize=12)
     ax.grid(True, alpha=0.3)
     
     # Legend
     ax.legend(loc='upper left', fontsize=7, title="Reference Data", ncol=2)
     
-    # ===== SUBPLOT 2: PC1 vs PC3 =====
+    # ===== SUBPLOT 2: PC3 vs PC1 =====
     ax = axes[1]
     
     # Plot reference hauls
     for pop in ["Autumn", "North", "Central", "South"]:
         mask = ref_pops == pop
-        ax.scatter(ref_centroids[mask, 0], ref_centroids[mask, 2], 
+        ax.scatter(ref_centroids[mask, 2], ref_centroids[mask, 0], 
                   c=pop_colors[pop], s=100, alpha=0.6, label=f"Ref {pop}", 
                   marker='o', edgecolors='black', linewidth=0.5)
     
     # Plot population centroids (used for classification)
     for pop in ["Autumn", "North", "Central", "South"]:
         centroid = pop_to_centroid[pop]
-        ax.scatter(centroid[0], centroid[2], c=pop_colors[pop], s=300, 
+        ax.scatter(centroid[2], centroid[0], c=pop_colors[pop], s=300, 
                   alpha=1.0, marker='*', edgecolors='black', linewidth=2,
                   label=f"{pop} centroid", zorder=10)
     
     # Plot Spring centroid (merged N+C+S, used in Step 1)
     spring_centroid = season_to_centroid["Spring"]
-    ax.scatter(spring_centroid[0], spring_centroid[2], c='#2ECC71', s=400, 
+    ax.scatter(spring_centroid[2], spring_centroid[0], c='#2ECC71', s=400, 
               alpha=1.0, marker='*', edgecolors='black', linewidth=2.5,
               label="Spring centroid (Step 1)", zorder=11)
     
@@ -724,12 +805,12 @@ def plot_pca_with_hauls(ref_pca, haul_centroids, ground_truth, haul_ids, output_
     first_sim = True
     for haul_id, centroid in haul_centroids.items():
         label = "Simulated hauls" if first_sim else None
-        ax.scatter(centroid[0], centroid[2], c='#9B59B6', s=50, 
+        ax.scatter(centroid[2], centroid[0], c='#9B59B6', s=50, 
                   alpha=0.9, marker='X', edgecolors='black', linewidth=0.8, label=label)
         first_sim = False
     
-    ax.set_xlabel(f"PC1 ({ref_pca['explained_var_ratio'][0]*100:.1f}%)", fontsize=12)
-    ax.set_ylabel(f"PC3 ({ref_pca['explained_var_ratio'][2]*100:.1f}%)", fontsize=12)
+    ax.set_xlabel(f"PC3 ({ref_pca['explained_var_ratio'][2]*100:.1f}%)", fontsize=12)
+    ax.set_ylabel(f"PC1 ({ref_pca['explained_var_ratio'][0]*100:.1f}%)", fontsize=12)
     ax.set_title(f"Ref Hauls (circles), Centroids (stars), Simulated (X)", fontsize=12)
     ax.grid(True, alpha=0.3)
     
@@ -755,7 +836,7 @@ def plot_pca_with_hauls(ref_pca, haul_centroids, ground_truth, haul_ids, output_
 
 def main():
     parser = argparse.ArgumentParser(description="Test simulated hauls against reference PCA")
-    parser.add_argument("--hauls", default="1-15", help="Haul range to test (e.g., '1-15', '16-30', '1,5,10-20')")
+    parser.add_argument("--hauls", default=None, help="Haul range to test (e.g., '1-15', '16-30', '1,5,10-20', or 'all'). If omitted, you'll be prompted interactively.")
     parser.add_argument("--vcf", default="../simulations/Bioinformatics_Course_2025_Herring_Sample_Subset.vcf",
                        help="Path to original VCF file")
     parser.add_argument("--metadata", default="simulated_hauls_metadata.txt",
@@ -773,8 +854,21 @@ def main():
     print("SIMULATED HAUL TESTING PIPELINE")
     print("="*80)
     
-    # Parse haul range
-    haul_ids = parse_haul_range(args.hauls)
+    # Determine hauls interactively if not provided
+    if not args.hauls:
+        print_haul_group_summary(args.proportions)
+        user = input("Which hauls do you want to run? (e.g., 1-15, 1,5,10-20, or 'all'): ").strip()
+        while not user:
+            user = input("Please enter a selection (or 'all'): ").strip()
+        if user.lower() == 'all':
+            haul_ids = get_all_haul_ids_from_proportions(args.proportions)
+        else:
+            haul_ids = parse_haul_range(user)
+    else:
+        if args.hauls.lower() == 'all':
+            haul_ids = get_all_haul_ids_from_proportions(args.proportions)
+        else:
+            haul_ids = parse_haul_range(args.hauls)
     print(f"\nTesting hauls: {haul_ids[0]} to {haul_ids[-1]} ({len(haul_ids)} hauls)")
     
     # Load reference model

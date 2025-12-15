@@ -5,7 +5,7 @@ This folder contains helper scripts that are useful for diagnostics and analysis
 - evaluate_pc_dimensions.py: Compares Step 1 (Autumn vs Spring) classification accuracy when using 2 PCs vs 3 PCs in the Reference PCA. Run from simulated_experiments.
 
   Example:
-  
+
   - source ../.venv/bin/activate
   - python tools/evaluate_pc_dimensions.py
 
@@ -14,7 +14,7 @@ This folder contains helper scripts that are useful for diagnostics and analysis
 - evaluate_spring_pca_dimensions.py: Compares Step 2 (N/C/S) classification accuracy using 2 vs 3 PCs in the Spring PCA, and reports Spring PCA explained variance.
 
   Example:
-  
+
   - source ../.venv/bin/activate
   - python tools/evaluate_spring_pca_dimensions.py
 
@@ -23,7 +23,7 @@ This folder contains helper scripts that are useful for diagnostics and analysis
 - debug_distances.py: Prints Autumn vs Spring predictions for a given predictions CSV to inspect non-zero Autumn on Spring-only hauls.
 
   Example:
-  
+
   - source ../.venv/bin/activate
   - python tools/debug_distances.py
 
