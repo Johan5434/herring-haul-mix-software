@@ -4,3 +4,4 @@ simulations/*.npz
 simulations/genomic_data.txt
 simulated_experiments/results/
 simulated_experiments/reference_model/
+simulated_experiments/PC_COMPONENTS_ANALYSIS.md

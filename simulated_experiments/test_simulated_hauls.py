@@ -77,6 +77,11 @@ def load_reference_model(model_dir="reference_model"):
         "haul_ids": np.array(ref_data["haul_ids"]),
         "haul_pops": np.array(ref_data["haul_pops"]),
     }
+
+    # Optional cached genotype/metadata (used to build the reference PCA)
+    if "_G_all" in ref_data and "_M_all" in ref_data:
+        ref_pca["_G_all"] = np.array(ref_data["_G_all"])
+        ref_pca["_M_all"] = np.array(ref_data["_M_all"], dtype=object)
     
     print(f"  ✓ Loaded reference PCA with {ref_pca['centroids'].shape[0]} haul centroids")
     print(f"  ✓ Explained variance: PC1={ref_pca['explained_var_ratio'][0]*100:.1f}%, "
@@ -265,7 +270,7 @@ def load_ground_truth_proportions(proportions_file="haul_proportions.txt"):
     return ground_truth
 
 
-def load_simulated_hauls(metadata_file, vcf_file, haul_ids_to_test):
+def load_simulated_hauls(metadata_file, vcf_file, haul_ids_to_test, ref_pca=None):
     """
     Load genotype data for specified simulated hauls.
     
@@ -300,30 +305,62 @@ def load_simulated_hauls(metadata_file, vcf_file, haul_ids_to_test):
     
     print(f"  ✓ Found {len(sample_to_hauls_list)} individuals")
     
-    # Load original metadata to get population info
-    original_metadata_path = "../simulations/All_Sample_Metadata.txt"
-    sample_to_pop = {}
-    with open(original_metadata_path, 'r') as f:
-        header = f.readline()
-        for line in f:
-            cols = line.strip().split('\t')
-            if len(cols) < 6:
-                continue
-            sample_to_pop[cols[0]] = cols[5]  # Population is column 5
-    
-    # Load VCF with proper metadata path
-    print(f"  Loading genotypes from VCF...")
-    G, M = genotype_matrix(vcf_file, metadata_filename=original_metadata_path)
-    
-    # Create a set of all samples that appear in any haul we're testing
     samples_in_hauls = set(sample_to_hauls_list.keys())
-    
-    # Filter to only samples in our hauls
-    mask = np.array([M[i, 0] in samples_in_hauls for i in range(M.shape[0])])
-    G_filtered = G[mask]
-    M_filtered = M[mask]
-    
-    print(f"  ✓ Loaded {G_filtered.shape[0]} individuals, {G_filtered.shape[1]} SNPs")
+
+    # Option A: use cached reference G/M if present (ensures SNP alignment)
+    G_filtered = None
+    M_filtered = None
+    missing = set()
+    if ref_pca is not None and "_G_all" in ref_pca and "_M_all" in ref_pca:
+        print("  Using cached reference genotypes for SNP alignment...")
+        G_ref = ref_pca["_G_all"]
+        M_ref = ref_pca["_M_all"]
+
+        idx_map = {sid: i for i, sid in enumerate(M_ref[:, 0])}
+        rows_G = []
+        rows_M = []
+        for sid in samples_in_hauls:
+            idx = idx_map.get(sid)
+            if idx is None:
+                missing.add(sid)
+                continue
+            rows_G.append(G_ref[idx])
+            rows_M.append(M_ref[idx])
+
+        if rows_G:
+            G_filtered = np.array(rows_G)
+            M_filtered = np.array(rows_M, dtype=object)
+            print(f"  ✓ Loaded {G_filtered.shape[0]} individuals from cached reference, {G_filtered.shape[1]} SNPs")
+
+    # Option B: fall back to VCF for any remaining samples
+    remaining = missing if G_filtered is not None else samples_in_hauls
+    if remaining:
+        original_metadata_path = "../simulations/All_Sample_Metadata.txt"
+        sample_to_pop = {}
+        with open(original_metadata_path, 'r') as f:
+            header = f.readline()
+            for line in f:
+                cols = line.strip().split('\t')
+                if len(cols) < 6:
+                    continue
+                sample_to_pop[cols[0]] = cols[5]  # Population is column 5
+
+        print(f"  Loading genotypes from VCF for remaining samples...")
+        G_full, M_full = genotype_matrix(vcf_file, metadata_filename=original_metadata_path)
+
+        mask = np.array([M_full[i, 0] in remaining for i in range(M_full.shape[0])])
+        G_vcf = G_full[mask]
+        M_vcf = M_full[mask]
+        print(f"  ✓ Loaded {G_vcf.shape[0]} individuals from VCF, {G_vcf.shape[1]} SNPs")
+
+        if G_filtered is None:
+            G_filtered, M_filtered = G_vcf, M_vcf
+        else:
+            G_filtered = np.vstack([G_filtered, G_vcf])
+            M_filtered = np.vstack([M_filtered, M_vcf])
+
+    if G_filtered is None:
+        raise RuntimeError("No genotypes loaded for requested hauls.")
     
     # Build haul_to_indices mapping
     # For individuals in multiple hauls, we need to duplicate them
@@ -709,17 +746,28 @@ def print_summary(haul_ids, ground_truth, predictions, ref_pca, haul_centroids):
     print("="*80 + "\n")
 
 
-def plot_pca_with_hauls(ref_pca, haul_centroids, ground_truth, haul_ids, output_dir="results"):
+def plot_pca_with_hauls(ref_pca, haul_centroids, ground_truth, haul_ids, spring_pca=None, output_dir="results"):
     """
-    Create a PCA plot showing reference hauls, centroids, and simulated hauls.
+    Create PCA plots showing reference hauls, centroids, and simulated hauls.
+    If Spring PCA is provided, plots both reference and Spring PCA spaces.
     Saves as PNG in output_dir and displays on screen.
     
     Parameters:
+      ref_pca: reference PCA model
+      haul_centroids: dict {haul_id: PC coordinates in reference space}
+      ground_truth: dict {haul_id: true proportions}
       haul_ids: list of haul IDs tested (used for filename)
+      spring_pca: Spring PCA model (optional)
+      output_dir: output directory for results
     """
     print("\nGenerating PCA visualization...")
     
-    fig, axes = plt.subplots(1, 2, figsize=(16, 7))
+    # Create subplots: 1 or 2 depending on whether Spring PCA is available
+    n_subplots = 2 if spring_pca is not None else 1
+    fig, axes = plt.subplots(1, n_subplots, figsize=(9*n_subplots, 7))
+    
+    if n_subplots == 1:
+        axes = [axes]
     
     # Get reference data
     ref_centroids = ref_pca["centroids"]
@@ -739,80 +787,83 @@ def plot_pca_with_hauls(ref_pca, haul_centroids, ground_truth, haul_ids, output_
         "South": "#F7DC6F"        # Yellow
     }
     
-    # ===== SUBPLOT 1: PC2 vs PC1 =====
+    # ===== SUBPLOT 1: Reference PCA (PC1 vs PC2) =====
     ax = axes[0]
     
     # Plot reference hauls
     for pop in ["Autumn", "North", "Central", "South"]:
         mask = ref_pops == pop
-        ax.scatter(ref_centroids[mask, 1], ref_centroids[mask, 0], 
-                  c=pop_colors[pop], s=100, alpha=0.6, label=f"Ref {pop}", 
-                  marker='o', edgecolors='black', linewidth=0.5)
-    
-    # Plot population centroids (used for classification)
+        ax.scatter(ref_centroids[mask, 0], ref_centroids[mask, 1],
+                   c=pop_colors[pop], s=100, alpha=0.6, label=f"Ref {pop}",
+                   marker='o', edgecolors='black', linewidth=0.5)
+
+    # Population centroids (used for classification)
     for pop in ["Autumn", "North", "Central", "South"]:
         centroid = pop_to_centroid[pop]
-        ax.scatter(centroid[1], centroid[0], c=pop_colors[pop], s=300, 
-                  alpha=1.0, marker='*', edgecolors='black', linewidth=2,
-                  label=f"{pop} centroid", zorder=10)
-    
-    # Plot Spring centroid (merged N+C+S, used in Step 1)
+        ax.scatter(centroid[0], centroid[1], c=pop_colors[pop], s=300,
+                   alpha=1.0, marker='*', edgecolors='black', linewidth=2,
+                   label=f"{pop} centroid", zorder=10)
+
+    # Spring centroid (merged N+C+S, used in Step 1)
     spring_centroid = season_to_centroid["Spring"]
-    ax.scatter(spring_centroid[1], spring_centroid[0], c='#2ECC71', s=400, 
-              alpha=1.0, marker='*', edgecolors='black', linewidth=2.5,
-              label="Spring centroid (Step 1)", zorder=11)
-    
-    # Plot simulated hauls (all in same distinct color)
+    ax.scatter(spring_centroid[0], spring_centroid[1], c='#2ECC71', s=400,
+               alpha=1.0, marker='*', edgecolors='black', linewidth=2.5,
+               label="Spring centroid (Step 1)", zorder=11)
+
+    # Simulated hauls in reference space
     first_sim = True
     for haul_id, centroid in haul_centroids.items():
         label = "Simulated hauls" if first_sim else None
-        ax.scatter(centroid[1], centroid[0], c='#9B59B6', s=50, 
-                  alpha=0.9, marker='X', edgecolors='black', linewidth=0.8, label=label)
+        ax.scatter(centroid[0], centroid[1], c='#9B59B6', s=50,
+                   alpha=0.9, marker='X', edgecolors='black', linewidth=0.8, label=label)
         first_sim = False
-    
-    ax.set_xlabel(f"PC2 ({ref_pca['explained_var_ratio'][1]*100:.1f}%)", fontsize=12)
-    ax.set_ylabel(f"PC1 ({ref_pca['explained_var_ratio'][0]*100:.1f}%)", fontsize=12)
-    ax.set_title(f"Ref Hauls (circles), Centroids (stars), Simulated (X)", fontsize=12)
+
+    ax.set_xlabel(f"PC1 ({ref_pca['explained_var_ratio'][0]*100:.1f}%)", fontsize=12)
+    ax.set_ylabel(f"PC2 ({ref_pca['explained_var_ratio'][1]*100:.1f}%)", fontsize=12)
+    ax.set_title("Reference PCA: Ref Hauls (circles), Centroids (stars), Simulated (X)", fontsize=12)
     ax.grid(True, alpha=0.3)
-    
-    # Legend
     ax.legend(loc='upper left', fontsize=7, title="Reference Data", ncol=2)
     
-    # ===== SUBPLOT 2: PC3 vs PC1 =====
-    ax = axes[1]
-    
-    # Plot reference hauls
-    for pop in ["Autumn", "North", "Central", "South"]:
-        mask = ref_pops == pop
-        ax.scatter(ref_centroids[mask, 2], ref_centroids[mask, 0], 
-                  c=pop_colors[pop], s=100, alpha=0.6, label=f"Ref {pop}", 
-                  marker='o', edgecolors='black', linewidth=0.5)
-    
-    # Plot population centroids (used for classification)
-    for pop in ["Autumn", "North", "Central", "South"]:
-        centroid = pop_to_centroid[pop]
-        ax.scatter(centroid[2], centroid[0], c=pop_colors[pop], s=300, 
-                  alpha=1.0, marker='*', edgecolors='black', linewidth=2,
-                  label=f"{pop} centroid", zorder=10)
-    
-    # Plot Spring centroid (merged N+C+S, used in Step 1)
-    spring_centroid = season_to_centroid["Spring"]
-    ax.scatter(spring_centroid[2], spring_centroid[0], c='#2ECC71', s=400, 
-              alpha=1.0, marker='*', edgecolors='black', linewidth=2.5,
-              label="Spring centroid (Step 1)", zorder=11)
-    
-    # Plot simulated hauls (all in same distinct color)
-    first_sim = True
-    for haul_id, centroid in haul_centroids.items():
-        label = "Simulated hauls" if first_sim else None
-        ax.scatter(centroid[2], centroid[0], c='#9B59B6', s=50, 
-                  alpha=0.9, marker='X', edgecolors='black', linewidth=0.8, label=label)
-        first_sim = False
-    
-    ax.set_xlabel(f"PC3 ({ref_pca['explained_var_ratio'][2]*100:.1f}%)", fontsize=12)
-    ax.set_ylabel(f"PC1 ({ref_pca['explained_var_ratio'][0]*100:.1f}%)", fontsize=12)
-    ax.set_title(f"Ref Hauls (circles), Centroids (stars), Simulated (X)", fontsize=12)
-    ax.grid(True, alpha=0.3)
+    # ===== SUBPLOT 2: Spring PCA (if available) =====
+    if spring_pca is not None:
+        ax = axes[1]
+        
+        spring_centroids = spring_pca["centroids"]
+        spring_pops = spring_pca["haul_pops"]
+        
+        # Compute Spring population centroids
+        spring_pop_to_centroid = compute_population_centroids(spring_pca)
+        
+        # Plot Spring reference hauls
+        for pop in ["North", "Central", "South"]:
+            mask = spring_pops == pop
+            if np.any(mask):
+                ax.scatter(spring_centroids[mask, 0], spring_centroids[mask, 1],
+                          c=pop_colors[pop], s=100, alpha=0.6, label=f"Ref {pop}",
+                          marker='o', edgecolors='black', linewidth=0.5)
+        
+        # Spring population centroids
+        for pop in ["North", "Central", "South"]:
+            if pop in spring_pop_to_centroid:
+                centroid = spring_pop_to_centroid[pop]
+                ax.scatter(centroid[0], centroid[1], c=pop_colors[pop], s=300,
+                          alpha=1.0, marker='*', edgecolors='black', linewidth=2,
+                          label=f"{pop} centroid", zorder=10)
+        
+        # Project simulated hauls to Spring PCA space
+        first_sim = True
+        for haul_id, centroid_ref in haul_centroids.items():
+            centroid_spring = project_ref_to_spring_pc(centroid_ref, ref_pca, spring_pca)
+            label = "Simulated hauls" if first_sim else None
+            ax.scatter(centroid_spring[0], centroid_spring[1], c='#9B59B6', s=50,
+                      alpha=0.9, marker='X', edgecolors='black', linewidth=0.8, label=label)
+            first_sim = False
+        
+        ax.set_xlabel(f"PC1 ({spring_pca['explained_var_ratio'][0]*100:.1f}%)", fontsize=12)
+        ax.set_ylabel(f"PC2 ({spring_pca['explained_var_ratio'][1]*100:.1f}%)", fontsize=12)
+        ax.set_title("Spring PCA: Ref Hauls (circles), Centroids (stars), Simulated (X)", fontsize=12)
+        ax.grid(True, alpha=0.3)
+        ax.legend(loc='upper left', fontsize=7, title="Spring Data", ncol=2)
     
     plt.tight_layout()
     
@@ -881,7 +932,7 @@ def main():
     ground_truth = load_ground_truth_proportions(args.proportions)
     
     # Load simulated haul data
-    G, M, haul_to_indices = load_simulated_hauls(args.metadata, args.vcf, haul_ids)
+    G, M, haul_to_indices = load_simulated_hauls(args.metadata, args.vcf, haul_ids, ref_pca=ref_pca)
     
     # Project to PCA space
     haul_centroids = project_hauls_to_pca(G, M, ref_pca, haul_to_indices)
@@ -896,7 +947,7 @@ def main():
     print_summary(haul_ids, ground_truth, predictions, ref_pca, haul_centroids)
     
     # Generate PCA plot
-    plot_pca_with_hauls(ref_pca, haul_centroids, ground_truth, haul_ids, args.output_dir)
+    plot_pca_with_hauls(ref_pca, haul_centroids, ground_truth, haul_ids, spring_pca=spring_pca, output_dir=args.output_dir)
     
     print(f"✓ Testing complete! Results saved to: {csv_file}\n")
 
