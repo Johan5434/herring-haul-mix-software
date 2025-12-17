@@ -2,10 +2,15 @@ __pycache__/
 simulations/*.vcf
 Pipeline\ version\ 1/*.vcf
 simulations/*.npz
+Pipeline\ version\ 1/*.npz
 simulations/genomic_data.txt
 simulated_experiments/results/
 simulated_experiments/reference_model/
 simulated_experiments/PC_COMPONENTS_ANALYSIS.md
+
+# Large model files (>100MB, use Git LFS or store separately)
+Pipeline\ version\ 1/GM_all_after_QC.npz
+Pipeline\ version\ 2/reference_model/reference_pca.json
 
 # CSV and plot outputs from v2 pipeline
 Pipeline\ version\ 2/results/*.csv
