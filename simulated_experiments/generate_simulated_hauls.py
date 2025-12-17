@@ -31,6 +31,41 @@ def load_metadata(metadata_path):
     return sample_to_pop
 
 
+def _load_samples_from_population_vcfs(simulations_dir):
+    """Fallback: Build sample->population map from population-specific VCFs.
+
+    Expects VCF files named Autumn.vcf, North.vcf, Central.vcf, South.vcf in
+    the provided simulations_dir. Returns a dict sample_id -> population.
+    """
+    pop_files = {
+        "Autumn": os.path.join(simulations_dir, "Autumn.vcf"),
+        "North": os.path.join(simulations_dir, "North.vcf"),
+        "Central": os.path.join(simulations_dir, "Central.vcf"),
+        "South": os.path.join(simulations_dir, "South.vcf"),
+    }
+    sample_to_pop = {}
+
+    for pop, vcf_path in pop_files.items():
+        if not os.path.exists(vcf_path):
+            continue
+        with open(vcf_path, 'r') as f:
+            for line in f:
+                if line.startswith('#CHROM'):
+                    cols = line.strip().split('\t')
+                    sample_ids = cols[9:]
+                    for sid in sample_ids:
+                        sample_to_pop[sid] = pop
+                    break
+
+    if not sample_to_pop:
+        raise FileNotFoundError(
+            "Could not find population VCFs to infer sample populations. "
+            f"Checked in: {simulations_dir}"
+        )
+
+    return sample_to_pop
+
+
 def get_individuals_per_population(sample_to_pop, qc_passed_filter=None):
     """
     Return a dict: population -> list of sample_ids.
@@ -330,17 +365,27 @@ def run_diversity_analysis(metadata_path, proportions_path):
 
 def main():
     """Main entry point."""
-    # Paths
-    original_metadata_path = "../simulations/All_Sample_Metadata.txt"
-    qc_passed_path = "./qc_passed_individuals.txt"
-    output_dir = "./"
+    # Resolve paths relative to this script's directory so it works from any CWD
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    # Inputs
+    original_metadata_path = os.path.normpath(os.path.join(script_dir, "..", "simulations", "All_Sample_Metadata.txt"))
+    qc_passed_path = os.path.join(script_dir, "qc_passed_individuals.txt")
+    # Outputs (written next to this script)
+    output_dir = script_dir
     metadata_out = os.path.join(output_dir, "simulated_hauls_metadata.txt")
     proportions_out = os.path.join(output_dir, "haul_proportions.txt")
     individuals_out = os.path.join(output_dir, "simulated_individuals_list.txt")
     
     print("Loading original metadata...")
-    sample_to_pop = load_metadata(original_metadata_path)
-    print(f"  Loaded {len(sample_to_pop)} individuals")
+    if os.path.exists(original_metadata_path):
+        sample_to_pop = load_metadata(original_metadata_path)
+        print(f"  Loaded {len(sample_to_pop)} individuals from metadata file")
+    else:
+        print(f"  Metadata not found at: {original_metadata_path}")
+        print("  Falling back to population VCF headers in ../simulations/")
+        sim_dir = os.path.normpath(os.path.join(script_dir, "..", "simulations"))
+        sample_to_pop = _load_samples_from_population_vcfs(sim_dir)
+        print(f"  Inferred {len(sample_to_pop)} individuals from population VCFs")
     
     # Check if QC-passed individuals list exists
     qc_passed_filter = None
@@ -362,18 +407,32 @@ def main():
         {"Autumn": 0, "North": 0, "Central": 100, "South": 0},    # 100 Spring (Central)
         {"Autumn": 0, "North": 0, "Central": 0, "South": 100},    # 100 Spring (South)
         {"Autumn": 0, "North": 33, "Central": 33, "South": 34},    # 100 Spring (Equal mix)
-        {"Autumn": 50, "North": 0, "Central": 0, "South": 50},    # 50/50 Autumn-South
+
+        {"Autumn": 90, "North": 10, "Central": 0, "South": 0},    # 90/10 Autumn (North)
+        {"Autumn": 90, "North": 0, "Central": 10, "South": 0},    # 90/10 Autumn (Central)
+        {"Autumn": 90, "North": 0, "Central": 0, "South": 10},    # 90/10 Autumn (South)
+        {"Autumn": 90, "North": 3, "Central": 3, "South": 4},    # 90/10 Autumn (Equal mix)
+
+        {"Autumn": 75, "North": 25, "Central": 0, "South": 0},    # 75/25 Autumn (North)
+        {"Autumn": 75, "North": 0, "Central": 25, "South": 0},    # 75/25 Autumn (Central)
+        {"Autumn": 75, "North": 0, "Central": 0, "South": 25},    # 75/25 Autumn (South)
+        {"Autumn": 75, "North": 8, "Central": 8, "South": 9},    # 75/25 Autumn (Equal mix)
+
         {"Autumn": 50, "North": 50, "Central": 0, "South": 0},    # 50/50 Autumn-North
         {"Autumn": 50, "North": 0, "Central": 50, "South": 0},    # 50/50 Autumn-Central
+        {"Autumn": 50, "North": 0, "Central": 0, "South": 50},    # 50/50 Autumn-South
         {"Autumn": 50, "North": 16, "Central": 17, "South": 17},    # 50/50 Autumn-Spring (mixed)
-        {"Autumn": 10, "North": 0, "Central": 0, "South": 90},    # 10/90 Spring (South)
+
+
+        {"Autumn": 25, "North": 75, "Central": 0, "South": 0},    # 25/75 Autumn (North)
+        {"Autumn": 25, "North": 0, "Central": 75, "South": 0},    # 25/75 Autumn (Central)
+        {"Autumn": 25, "North": 0, "Central": 0, "South": 75},    # 25/75 Autumn (South)
+        {"Autumn": 25, "North": 25, "Central": 25, "South": 25},    # 25/75 Autumn (Equal mix)
+
         {"Autumn": 10, "North": 90, "Central": 0, "South": 0},    # 10/90 Spring (North)
         {"Autumn": 10, "North": 0, "Central": 90, "South": 0},    # 10/90 Spring (Central)
+        {"Autumn": 10, "North": 0, "Central": 0, "South": 90},    # 10/90 Spring (South)
         {"Autumn": 10, "North": 30, "Central": 30, "South": 30},    # 10/90 Spring (Mixed)
-        {"Autumn": 60, "North": 40, "Central": 0, "South": 0},    # 60/40 Autumn-North
-        {"Autumn": 0, "North": 50, "Central": 50, "South": 0},    # 50/50 North-Central
-        {"Autumn": 33, "North": 33, "Central": 33, "South": 0},   # 33/33/33 A-N-C (approx)
-        {"Autumn": 25, "North": 25, "Central": 25, "South": 25},  # Equal 4-way split
     ]
     
     print(f"\nGenerating hauls with {len(proportions_list)} proportion(s), 10 replicates each...")
