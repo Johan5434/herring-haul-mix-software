@@ -16,7 +16,7 @@ import numpy as np
 import argparse
 from datetime import datetime
 
-sys.path.insert(0, os.path.abspath("../simulations"))
+sys.path.insert(0, os.path.abspath("../Pipeline version 1"))
 
 from data_loading import genotype_matrix
 from pca_hauls import (
@@ -89,7 +89,7 @@ def load_simulated_hauls(metadata_file, vcf_file, haul_ids_to_test, ref_pca=None
     
     remaining = missing if G_filtered is not None else samples_in_hauls
     if remaining:
-        original_metadata_path = "../simulations/All_Sample_Metadata.txt"
+        original_metadata_path = "../Pipeline version 1/All_Sample_Metadata.txt"
         G_full, M_full = genotype_matrix(vcf_file, metadata_filename=original_metadata_path)
         
         mask = np.array([M_full[i, 0] in remaining for i in range(M_full.shape[0])])
@@ -295,11 +295,11 @@ def load_ground_truth_proportions(proportions_file="haul_proportions.txt"):
 def main():
     parser = argparse.ArgumentParser(description="Analyze PC combinations: Ref 2/3 × Spring 2/3")
     parser.add_argument("--hauls", required=True, help="Haul range to test")
-    parser.add_argument("--vcf", default="../simulations/Bioinformatics_Course_2025_Herring_Sample_Subset.vcf")
+    parser.add_argument("--vcf", default="../Pipeline version 1/Bioinformatics_Course_2025_Herring_Sample_Subset.vcf")
     parser.add_argument("--metadata", default="simulated_hauls_metadata.txt")
     parser.add_argument("--proportions", default="haul_proportions.txt")
     parser.add_argument("--qc-file", default="qc_passed_individuals.txt")
-    parser.add_argument("--ref-metadata", default="../simulations/All_Sample_Metadata.txt")
+    parser.add_argument("--ref-metadata", default="../Pipeline version 1/All_Sample_Metadata.txt")
     
     args = parser.parse_args()
     

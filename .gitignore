@@ -1,8 +1,12 @@
 __pycache__/
-*.vcf
-*.npz
+simulations/*.vcf
+Pipeline\ version\ 1/*.vcf
+simulations/*.npz
 simulations/genomic_data.txt
 simulated_experiments/results/
 simulated_experiments/reference_model/
 simulated_experiments/PC_COMPONENTS_ANALYSIS.md
-Pipeline*/reference_model/
+
+# CSV and plot outputs from v2 pipeline
+Pipeline\ version\ 2/results/*.csv
+Pipeline\ version\ 2/results/*.png

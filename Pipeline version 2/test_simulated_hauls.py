@@ -28,8 +28,8 @@ import csv
 import matplotlib.pyplot as plt
 from matplotlib.patches import Patch
 
-# Add parent directory to path to import from simulations/
-sys.path.insert(0, os.path.abspath("../simulations"))
+# Add parent directory to path to import shared v1 modules
+sys.path.insert(0, os.path.abspath("../Pipeline version 1"))
 
 from data_loading import genotype_matrix
 from pca_hauls import project_individuals_to_PCs, build_spring_pca_from_ref
@@ -335,7 +335,7 @@ def load_simulated_hauls(metadata_file, vcf_file, haul_ids_to_test, ref_pca=None
     # Option B: fall back to VCF for any remaining samples
     remaining = missing if G_filtered is not None else samples_in_hauls
     if remaining:
-        original_metadata_path = "../simulations/All_Sample_Metadata.txt"
+        original_metadata_path = "../Pipeline version 1/All_Sample_Metadata.txt"
         sample_to_pop = {}
         with open(original_metadata_path, 'r') as f:
             header = f.readline()
@@ -888,7 +888,7 @@ def plot_pca_with_hauls(ref_pca, haul_centroids, ground_truth, haul_ids, spring_
 def main():
     parser = argparse.ArgumentParser(description="Test simulated hauls against reference PCA")
     parser.add_argument("--hauls", default=None, help="Haul range to test (e.g., '1-15', '16-30', '1,5,10-20', or 'all'). If omitted, you'll be prompted interactively.")
-    parser.add_argument("--vcf", default="../simulations/Bioinformatics_Course_2025_Herring_Sample_Subset.vcf",
+    parser.add_argument("--vcf", default="../Pipeline version 1/Bioinformatics_Course_2025_Herring_Sample_Subset.vcf",
                        help="Path to original VCF file")
     parser.add_argument("--metadata", default="simulated_hauls_metadata.txt",
                        help="Path to simulated hauls metadata")

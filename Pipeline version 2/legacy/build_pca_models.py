@@ -28,7 +28,7 @@ from pca_hauls import build_reference_pca_from_GM, build_spring_pca_from_ref
 RAW_VCF = os.path.join(SIM_DIR, "Bioinformatics_Course_2025_Herring_Sample_Subset.vcf")
 METADATA = os.path.join(SIM_DIR, "All_Sample_Metadata.txt")
 OUT_QC_IDS = os.path.join(THIS_DIR, "qc_passed_individuals.txt")
-REF_DIR = os.path.join(THIS_DIR, "reference_model")
+REF_DIR = os.path.join(THIS_DIR, "reference_model_current")
 REF_JSON = os.path.join(REF_DIR, "reference_pca.json")
 SPRING_JSON = os.path.join(REF_DIR, "spring_pca.json")
 

@@ -19,14 +19,14 @@ import numpy as np
 import pandas as pd
 from datetime import datetime
 
-# Add parent directory to path
-sys.path.insert(0, os.path.abspath("../simulations"))
+# Add parent directory to path (shared modules live in Pipeline version 1)
+sys.path.insert(0, os.path.abspath("../Pipeline version 1"))
 
 from data_loading import genotype_matrix
 from pca_hauls import project_individuals_to_PCs
 
 
-def build_reference_model_from_empirical(vcf_file, metadata_file, output_dir="reference_model", 
+def build_reference_model_from_empirical(vcf_file, metadata_file, output_dir="reference_model_current", 
                                          qc_passed_file="qc_passed_individuals.txt"):
     """
     Build reference PCA model from empirical hauls using QC-passed individuals.
@@ -160,6 +160,10 @@ def build_reference_model_from_empirical(vcf_file, metadata_file, output_dir="re
     print("\n7. Saving reference model...")
     os.makedirs(output_dir, exist_ok=True)
     
+    # Safety: never overwrite the pinned model directory
+    pinned = os.path.abspath(os.path.join(os.path.dirname(__file__), 'reference_model_v1npz'))
+    if os.path.abspath(output_dir) == pinned:
+        raise RuntimeError("Refusing to overwrite pinned model directory: reference_model_v1npz. Use a different output_dir.")
     model_path = os.path.join(output_dir, "reference_pca.json")
     with open(model_path, 'w') as f:
         json.dump(ref_model, f, indent=2)
@@ -213,7 +217,7 @@ def build_reference_model_from_empirical(vcf_file, metadata_file, output_dir="re
 if __name__ == "__main__":
     # Paths
     script_dir = os.path.dirname(os.path.abspath(__file__))
-    sim_dir = os.path.abspath("../simulations")
+    sim_dir = os.path.abspath("../Pipeline version 1")
     vcf_file = os.path.join(sim_dir, "Bioinformatics_Course_2025_Herring_Sample_Subset.vcf")
     metadata_file = os.path.join(sim_dir, "All_Sample_Metadata.txt")
     qc_file = os.path.join(script_dir, "qc_passed_individuals.txt")

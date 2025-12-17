@@ -16,15 +16,15 @@ This will:
 5. Output a list of QC-passed sample IDs
 6. Then run generate_simulated_hauls.py to create hauls from these individuals
 
-Note: This assumes the original VCF and metadata are in ../simulations/
+Note: This assumes the original VCF and metadata are in ../Pipeline version 1/
 """
 
 import numpy as np
 import sys
 import os
 
-# Add simulations folder to path so we can import from pipeline
-sys.path.insert(0, '../simulations')
+# Add Pipeline version 1 folder to path so we can import shared modules
+sys.path.insert(0, '../Pipeline version 1')
 
 from data_loading import genotype_matrix
 from qc_metrics import build_table
@@ -80,8 +80,8 @@ def filter_individuals_by_missingness(G, M, max_ind_missing=0.10):
 
 
 def qc_single_vcf(
-    vcf_filename,
-    metadata_filename="../simulations/All_Sample_Metadata.txt",
+  vcf_filename,
+  metadata_filename="../Pipeline version 1/All_Sample_Metadata.txt",
     filter_snp_missing=True,
     max_snp_missing=0.05,
     filter_ind_missing=True,
@@ -198,8 +198,8 @@ def qc_single_vcf(
 
 def main():
     """Main entry point."""
-    original_vcf = "../simulations/Bioinformatics_Course_2025_Herring_Sample_Subset.vcf"
-    metadata_file = "../simulations/All_Sample_Metadata.txt"
+    original_vcf = "../Pipeline version 1/Bioinformatics_Course_2025_Herring_Sample_Subset.vcf"
+    metadata_file = "../Pipeline version 1/All_Sample_Metadata.txt"
     output_file = "./qc_passed_individuals.txt"
     
     print("="*70)

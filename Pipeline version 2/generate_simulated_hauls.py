@@ -368,7 +368,7 @@ def main():
     # Resolve paths relative to this script's directory so it works from any CWD
     script_dir = os.path.dirname(os.path.abspath(__file__))
     # Inputs
-    original_metadata_path = os.path.normpath(os.path.join(script_dir, "..", "simulations", "All_Sample_Metadata.txt"))
+    original_metadata_path = os.path.normpath(os.path.join(script_dir, "..", "Pipeline version 1", "All_Sample_Metadata.txt"))
     qc_passed_path = os.path.join(script_dir, "qc_passed_individuals.txt")
     # Outputs (written next to this script)
     output_dir = script_dir
@@ -382,8 +382,8 @@ def main():
         print(f"  Loaded {len(sample_to_pop)} individuals from metadata file")
     else:
         print(f"  Metadata not found at: {original_metadata_path}")
-        print("  Falling back to population VCF headers in ../simulations/")
-        sim_dir = os.path.normpath(os.path.join(script_dir, "..", "simulations"))
+        print("  Falling back to population VCF headers in ../Pipeline version 1/")
+        sim_dir = os.path.normpath(os.path.join(script_dir, "..", "Pipeline version 1"))
         sample_to_pop = _load_samples_from_population_vcfs(sim_dir)
         print(f"  Inferred {len(sample_to_pop)} individuals from population VCFs")
     
