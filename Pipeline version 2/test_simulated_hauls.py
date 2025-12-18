@@ -28,6 +28,9 @@ import csv
 import matplotlib.pyplot as plt
 from matplotlib.patches import Patch
 
+# Centralized paths for inputs/outputs
+import config_paths
+
 # Add parent directory to path to import shared v1 modules
 sys.path.insert(0, os.path.abspath("../Pipeline version 1"))
 
@@ -164,7 +167,18 @@ def _read_proportions_rows(proportions_file):
     a list of tuples: (haul_num:int, haul_id:str, A:int, N:int, C:int, S:int)
     """
     rows = []
-    # Try TSV first (default file)
+
+    def add_row(hid, cols):
+        try:
+            hnum = int(hid.split('_')[1])
+        except Exception:
+            return
+        try:
+            A = int(float(cols[0])); N = int(float(cols[1])); C = int(float(cols[2])); S = int(float(cols[3]))
+        except Exception:
+            return
+        rows.append((hnum, hid, A, N, C, S))
+
     if proportions_file.endswith('.txt'):
         with open(proportions_file, 'r') as f:
             header = f.readline()
@@ -173,26 +187,22 @@ def _read_proportions_rows(proportions_file):
                 if len(parts) < 6:
                     continue
                 hid = parts[0]
-                try:
-                    hnum = int(hid.split('_')[1])
-                except Exception:
+                if hid.lower().startswith('haul_id'):
                     continue
-                A = int(parts[2]); N = int(parts[3]); C = int(parts[4]); S = int(parts[5])
-                rows.append((hnum, hid, A, N, C, S))
+                # parts[1] is proportion_name; numeric columns at 2-5
+                add_row(hid, parts[2:6])
     else:
-        # CSV fallback
         with open(proportions_file, 'r', newline='') as f:
-            reader = csv.DictReader(f)
-            for r in reader:
-                hid = r.get('haul_id')
-                if not hid:
+            reader = csv.reader(f)
+            header = next(reader, None)
+            for parts in reader:
+                if len(parts) < 6:
                     continue
-                try:
-                    hnum = int(hid.split('_')[1])
-                except Exception:
+                hid = parts[0]
+                if hid.lower().startswith('haul_id'):
                     continue
-                A = int(r['Autumn_%']); N = int(r['North_%']); C = int(r['Central_%']); S = int(r['South_%'])
-                rows.append((hnum, hid, A, N, C, S))
+                add_row(hid, parts[2:6])
+
     rows.sort(key=lambda x: x[0])
     return rows
 
@@ -203,6 +213,10 @@ def print_haul_group_summary(proportions_file):
     Example output:
     * hauls 1–10: 100A / 0N / 0C / 0S
     """
+    if not proportions_file or not os.path.exists(proportions_file):
+        print("  (No proportions file available to summarize hauls.)")
+        return
+
     rows = _read_proportions_rows(proportions_file)
     if not rows:
         print("(No haul proportions found to summarize)")
@@ -245,28 +259,38 @@ def load_ground_truth_proportions(proportions_file="haul_proportions.txt"):
     Returns:
       dict: {haul_id: {"Autumn": %, "North": %, "Central": %, "South": %}}
     """
+    if not proportions_file or not os.path.exists(proportions_file):
+        print(f"  ⚠ Ground truth proportions not provided or file not found: {proportions_file}")
+        print("    Proceeding without ground truth; errors/summary will be skipped.")
+        return None
+
     ground_truth = {}
-    
     with open(proportions_file, 'r') as f:
         header = f.readline()  # skip header
         for line in f:
-            parts = line.strip().split('\t')
-            if len(parts) < 9:
+            parts = line.strip().split(',') if ',' in line else line.strip().split('\t')
+            if not parts or parts[0].lower().startswith("haul_id"):
                 continue
-            
+            # Many files have a proportion_name column; numeric cols are typically at indices 2-5
+            candidates = []
+            if len(parts) >= 6:
+                candidates = parts[2:6]
+            elif len(parts) >= 5:
+                candidates = parts[1:5]
+            else:
+                continue
+            try:
+                A, N, C, S = map(float, candidates)
+            except ValueError:
+                # Skip rows that are not numeric
+                continue
             haul_id = parts[0]
-            autumn_pct = int(parts[2])
-            north_pct = int(parts[3])
-            central_pct = int(parts[4])
-            south_pct = int(parts[5])
-            
             ground_truth[haul_id] = {
-                "Autumn": autumn_pct,
-                "North": north_pct,
-                "Central": central_pct,
-                "South": south_pct,
+                "Autumn": A,
+                "North": N,
+                "Central": C,
+                "South": S,
             }
-    
     return ground_truth
 
 
@@ -371,19 +395,16 @@ def load_simulated_hauls(metadata_file, vcf_file, haul_ids_to_test, ref_pca=None
     for i in range(M_filtered.shape[0]):
         sample_id = M_filtered[i, 0]
         hauls_for_sample = sample_to_hauls_list[sample_id]
-        
         # Add this individual once for each haul it appears in
         for haul_id in hauls_for_sample:
             G_expanded.append(G_filtered[i])
             M_row = [M_filtered[i, 0], haul_id, M_filtered[i, 2]]
             M_expanded.append(M_row)
-            
-            # Track the index for this haul
             expanded_idx = len(G_expanded) - 1
             if haul_id not in haul_to_indices:
                 haul_to_indices[haul_id] = []
             haul_to_indices[haul_id].append(expanded_idx)
-    
+
     # Convert back to numpy arrays
     G_expanded = np.array(G_expanded)
     M_expanded = np.array(M_expanded, dtype=object)
@@ -487,7 +508,12 @@ def classify_hauls(haul_centroids, ref_pca, ground_truth, spring_pca=None, use_s
     # Process hauls in sorted order to ensure consistent results
     for haul_id in sorted(haul_centroids.keys()):
         centroid = haul_centroids[haul_id]
-        true_mix = ground_truth[haul_id]
+        true_mix = ground_truth[haul_id] if ground_truth else {
+            "Autumn": 0,
+            "North": 0,
+            "Central": 0,
+            "South": 0,
+        }
         
         # Step 1: Autumn vs Spring
         step1_result = apply_step1_rules_for_haul(centroid, true_mix, season_to_centroid)
@@ -574,9 +600,7 @@ def classify_hauls(haul_centroids, ref_pca, ground_truth, spring_pca=None, use_s
 def write_results_csv(haul_ids, ground_truth, predictions, output_dir="results"):
     """
     Write results to CSV file with timestamp.
-    
-    Format:
-      haul_id, true_A%, true_N%, true_C%, true_S%, pred_A%, pred_N%, pred_C%, pred_S%, error_A, error_N, error_C, error_S
+    If ground_truth is None, write only predictions.
     """
     os.makedirs(output_dir, exist_ok=True)
     
@@ -585,25 +609,31 @@ def write_results_csv(haul_ids, ground_truth, predictions, output_dir="results")
     output_file = os.path.join(output_dir, f"predictions_{haul_range}_{timestamp}.csv")
     
     with open(output_file, 'w') as f:
-        # Header
-        f.write("haul_id,true_Autumn,true_North,true_Central,true_South,"
-                "pred_Autumn,pred_North,pred_Central,pred_South,"
-                "error_Autumn,error_North,error_Central,error_South\n")
-        
-        # Data rows
-        for haul_id in sorted(haul_ids):
-            true = ground_truth[haul_id]
-            pred = predictions[haul_id]
+        if ground_truth is None:
+            # Header: predictions only
+            f.write("haul_id,pred_Autumn,pred_North,pred_Central,pred_South\n")
+            for haul_id in sorted(haul_ids):
+                pred = predictions[haul_id]
+                f.write(f"{haul_id},{pred['Autumn']},{pred['North']},{pred['Central']},{pred['South']}\n")
+        else:
+            # Header with truths and errors
+            f.write("haul_id,true_Autumn,true_North,true_Central,true_South,"
+                    "pred_Autumn,pred_North,pred_Central,pred_South,"
+                    "error_Autumn,error_North,error_Central,error_South\n")
             
-            error_A = pred["Autumn"] - true["Autumn"]
-            error_N = pred["North"] - true["North"]
-            error_C = pred["Central"] - true["Central"]
-            error_S = pred["South"] - true["South"]
-            
-            f.write(f"{haul_id},"
-                   f"{true['Autumn']},{true['North']},{true['Central']},{true['South']},"
-                   f"{pred['Autumn']},{pred['North']},{pred['Central']},{pred['South']},"
-                   f"{error_A},{error_N},{error_C},{error_S}\n")
+            for haul_id in sorted(haul_ids):
+                true = ground_truth[haul_id]
+                pred = predictions[haul_id]
+                
+                error_A = pred["Autumn"] - true["Autumn"]
+                error_N = pred["North"] - true["North"]
+                error_C = pred["Central"] - true["Central"]
+                error_S = pred["South"] - true["South"]
+                
+                f.write(f"{haul_id},"
+                       f"{true['Autumn']},{true['North']},{true['Central']},{true['South']},"
+                       f"{pred['Autumn']},{pred['North']},{pred['Central']},{pred['South']},"
+                       f"{error_A},{error_N},{error_C},{error_S}\n")
     
     print(f"\n✓ Results saved to: {output_file}")
     return output_file
@@ -611,6 +641,9 @@ def write_results_csv(haul_ids, ground_truth, predictions, output_dir="results")
 
 def print_summary(haul_ids, ground_truth, predictions, ref_pca, haul_centroids):
     """Print detailed summary with Step 1 (A/S) and Step 2 (N/C/S for Spring) results."""
+    if ground_truth is None:
+        print("\n(No ground truth provided; skipping summary/error metrics.)")
+        return
     print("\n" + "="*80)
     print("CLASSIFICATION RESULTS SUMMARY")
     print("="*80)
@@ -781,10 +814,10 @@ def plot_pca_with_hauls(ref_pca, haul_centroids, ground_truth, haul_ids, spring_
     
     # Define colors for each population
     pop_colors = {
-        "Autumn": "#E8B4A8",      # Soft peachy-orange
-        "North": "#9DB4C4",       # Soft slate blue
-        "Central": "#A8C9A8",     # Soft sage green
-        "South": "#D4A5D4"        # Soft lavender-mauve
+        "Autumn": "#B557D1",      # Medium purple
+        "North": "#5E89B8",       # Medium deep blue
+        "Central": "#E07550",     # Medium orange-red
+        "South": "#66B366"        # Medium vibrant green
     }
     
     # ===== SUBPLOT 1: Reference PCA (PC1 vs PC2) =====
@@ -812,7 +845,7 @@ def plot_pca_with_hauls(ref_pca, haul_centroids, ground_truth, haul_ids, spring_
     first_sim = True
     for haul_id, centroid in haul_centroids.items():
         label = "Simulated hauls" if first_sim else None
-        ax.scatter(centroid[0], centroid[1], c='#9B59B6', s=50,
+        ax.scatter(centroid[0], centroid[1], c='#E74C3C', s=50,
                    alpha=0.9, marker='X', edgecolors='black', linewidth=0.8, label=label)
         first_sim = False
 
@@ -853,7 +886,7 @@ def plot_pca_with_hauls(ref_pca, haul_centroids, ground_truth, haul_ids, spring_
         for haul_id, centroid_ref in haul_centroids.items():
             centroid_spring = project_ref_to_spring_pc(centroid_ref, ref_pca, spring_pca)
             label = "Simulated hauls" if first_sim else None
-            ax.scatter(centroid_spring[0], centroid_spring[1], c='#9B59B6', s=50,
+            ax.scatter(centroid_spring[0], centroid_spring[1], c='#E74C3C', s=50,
                       alpha=0.9, marker='X', edgecolors='black', linewidth=0.8, label=label)
             first_sim = False
         
@@ -886,15 +919,15 @@ def plot_pca_with_hauls(ref_pca, haul_centroids, ground_truth, haul_ids, spring_
 def main():
     parser = argparse.ArgumentParser(description="Test simulated hauls against reference PCA")
     parser.add_argument("--hauls", default=None, help="Haul range to test (e.g., '1-15', '16-30', '1,5,10-20', or 'all'). If omitted, you'll be prompted interactively.")
-    parser.add_argument("--vcf", default="../Pipeline version 1/Bioinformatics_Course_2025_Herring_Sample_Subset.vcf",
+    parser.add_argument("--vcf", default=config_paths.DEFAULT_VCF,
                        help="Path to original VCF file")
-    parser.add_argument("--metadata", default="simulated_hauls_metadata.txt",
+    parser.add_argument("--metadata", default=config_paths.DEFAULT_METADATA,
                        help="Path to simulated hauls metadata")
-    parser.add_argument("--proportions", default="haul_proportions.txt",
+    parser.add_argument("--proportions", default=config_paths.DEFAULT_PROPORTIONS,
                        help="Path to ground truth proportions")
-    parser.add_argument("--model-dir", default="reference_model",
+    parser.add_argument("--model-dir", default=config_paths.DEFAULT_MODEL_DIR,
                        help="Directory containing reference model")
-    parser.add_argument("--output-dir", default="results",
+    parser.add_argument("--output-dir", default=config_paths.DEFAULT_OUTPUT_DIR,
                        help="Directory for output CSV files")
     
     args = parser.parse_args()
@@ -905,19 +938,29 @@ def main():
     
     # Determine hauls interactively if not provided
     if not args.hauls:
-        print_haul_group_summary(args.proportions)
-        user = input("Which hauls do you want to run? (e.g., 1-15, 1,5,10-20, or 'all'): ").strip()
-        while not user:
-            user = input("Please enter a selection (or 'all'): ").strip()
-        if user.lower() == 'all':
-            haul_ids = get_all_haul_ids_from_proportions(args.proportions)
+        if args.proportions and os.path.exists(args.proportions):
+            print_haul_group_summary(args.proportions)
+            user = input("Which hauls do you want to run? (e.g., 1-15, 1,5,10-20, or 'all'): ").strip()
+            while not user:
+                user = input("Please enter a selection (or 'all'): ").strip()
+            if user.lower() == 'all':
+                haul_ids = get_all_haul_ids_from_proportions(args.proportions)
+            else:
+                haul_ids = parse_haul_range(user)
         else:
+            # No proportions file; require explicit haul range from user
+            user = input("No proportions file provided. Enter haul range explicitly (e.g., 1-15 or 1,5,10-20): ").strip()
+            while not user:
+                user = input("Please enter a haul selection: ").strip()
             haul_ids = parse_haul_range(user)
     else:
         if args.hauls.lower() == 'all':
-            haul_ids = get_all_haul_ids_from_proportions(args.proportions)
+            haul_ids = get_all_haul_ids_from_proportions(args.proportions) if args.proportions and os.path.exists(args.proportions) else []
         else:
             haul_ids = parse_haul_range(args.hauls)
+    if not haul_ids:
+        raise SystemExit("No haul IDs provided. Please specify --hauls or supply a proportions file to list them.")
+
     print(f"\nTesting hauls: {haul_ids[0]} to {haul_ids[-1]} ({len(haul_ids)} hauls)")
     
     # Load reference model

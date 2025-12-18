@@ -37,10 +37,10 @@ def create_stacked_bar_chart(df, output_path=None, fig_size=(14, 20)):
     
     # Population colors
     colors = {
-        'Autumn': '#E8B4A8',      # Soft peachy-orange
-        'North': '#9DB4C4',       # Soft slate blue
-        'Central': '#A8C9A8',     # Soft sage green
-        'South': '#D4A5D4',       # Soft lavender-mauve
+        'Autumn': '#B557D1',      # Medium purple
+        'North': '#5E89B8',       # Medium deep blue
+        'Central': '#E07550',     # Medium orange-red
+        'South': '#66B366',       # Medium vibrant green
     }
     
     # Create figure and axis
