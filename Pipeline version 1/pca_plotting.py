@@ -5,10 +5,10 @@ from mpl_toolkits.mplot3d import Axes3D  # noqa: F401, needed for 3D
 
 # colors per population – adjust if you want
 POP_COLORS = {
-    "Autumn": "tab:orange",
-    "North": "tab:blue",
-    "Central": "tab:green",
-    "South": "tab:red",
+    "Autumn": "#E8B4A8",  # Soft peachy-orange
+    "North": "#9DB4C4",   # Soft slate blue
+    "Central": "#A8C9A8", # Soft sage green
+    "South": "#D4A5D4",   # Soft lavender-mauve
 }
 
 

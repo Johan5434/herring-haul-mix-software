@@ -781,10 +781,10 @@ def plot_pca_with_hauls(ref_pca, haul_centroids, ground_truth, haul_ids, spring_
     
     # Define colors for each population
     pop_colors = {
-        "Autumn": "#FF6B35",      # Orange-red
-        "North": "#004E89",       # Dark blue
-        "Central": "#1B9CFC",     # Light blue
-        "South": "#F7DC6F"        # Yellow
+        "Autumn": "#E8B4A8",      # Soft peachy-orange
+        "North": "#9DB4C4",       # Soft slate blue
+        "Central": "#A8C9A8",     # Soft sage green
+        "South": "#D4A5D4"        # Soft lavender-mauve
     }
     
     # ===== SUBPLOT 1: Reference PCA (PC1 vs PC2) =====
@@ -795,20 +795,18 @@ def plot_pca_with_hauls(ref_pca, haul_centroids, ground_truth, haul_ids, spring_
         mask = ref_pops == pop
         ax.scatter(ref_centroids[mask, 0], ref_centroids[mask, 1],
                    c=pop_colors[pop], s=100, alpha=0.6, label=f"Ref {pop}",
-                   marker='o', edgecolors='black', linewidth=0.5)
+                   marker='o', edgecolors='black', linewidth=1.2)
 
-    # Population centroids (used for classification)
-    for pop in ["Autumn", "North", "Central", "South"]:
-        centroid = pop_to_centroid[pop]
-        ax.scatter(centroid[0], centroid[1], c=pop_colors[pop], s=300,
-                   alpha=1.0, marker='*', edgecolors='black', linewidth=2,
-                   label=f"{pop} centroid", zorder=10)
+    # Autumn and Spring centroids (used for Step 1 classification)
+    autumn_centroid = pop_to_centroid["Autumn"]
+    ax.scatter(autumn_centroid[0], autumn_centroid[1], c=pop_colors["Autumn"], s=300,
+               alpha=1.0, marker='*', edgecolors='black', linewidth=2,
+               label="Autumn centroid", zorder=10)
 
-    # Spring centroid (merged N+C+S, used in Step 1)
     spring_centroid = season_to_centroid["Spring"]
-    ax.scatter(spring_centroid[0], spring_centroid[1], c='#2ECC71', s=400,
+    ax.scatter(spring_centroid[0], spring_centroid[1], c='#C9B8A8', s=400,
                alpha=1.0, marker='*', edgecolors='black', linewidth=2.5,
-               label="Spring centroid (Step 1)", zorder=11)
+               label="Spring centroid", zorder=11)
 
     # Simulated hauls in reference space
     first_sim = True
@@ -840,7 +838,7 @@ def plot_pca_with_hauls(ref_pca, haul_centroids, ground_truth, haul_ids, spring_
             if np.any(mask):
                 ax.scatter(spring_centroids[mask, 0], spring_centroids[mask, 1],
                           c=pop_colors[pop], s=100, alpha=0.6, label=f"Ref {pop}",
-                          marker='o', edgecolors='black', linewidth=0.5)
+                          marker='o', edgecolors='black', linewidth=1.2)
         
         # Spring population centroids
         for pop in ["North", "Central", "South"]:
