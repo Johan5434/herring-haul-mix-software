@@ -224,7 +224,7 @@ def _apply_r3d_rule_table(r3d, table=SPRING_R3D_RULE_TABLE):
     return {"North": pN, "Central": pC, "South": pS}
 
 
-SPRING_RELEVANT_MIN_SPRING_FRAC = 0.90
+SPRING_RELEVANT_MIN_SPRING_FRAC = 0.50
 SPRING_RELEVANT_MAX_AUTUMN_FRAC = 0.10
 
 
