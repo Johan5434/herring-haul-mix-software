@@ -433,6 +433,23 @@ def main():
         {"Autumn": 10, "North": 0, "Central": 90, "South": 0},    # 10/90 Spring (Central)
         {"Autumn": 10, "North": 0, "Central": 0, "South": 90},    # 10/90 Spring (South)
         {"Autumn": 10, "North": 30, "Central": 30, "South": 30},    # 10/90 Spring (Mixed)
+
+        {"Autumn": 0, "North": 33, "Central": 33, "South": 34},    # Spring equal mix 33/33/34
+
+        {"Autumn": 0, "North": 25, "Central": 37, "South": 38},    # Decrease 1 North 25/37/38
+        {"Autumn": 0, "North": 15, "Central": 42, "South": 43},    # Decrease 2 North 15/42/43
+        {"Autumn": 0, "North": 5, "Central": 47, "South": 48},    # Decrease 3 North 5/47/48
+        {"Autumn": 0, "North": 0, "Central": 50, "South": 50},    # No North 0/50/50
+
+        {"Autumn": 0, "North": 37, "Central": 25, "South": 38},    # Decrease 1 Central 25/37/38
+        {"Autumn": 0, "North": 41, "Central": 15, "South": 43},    # Decrease 2 Central 15/42/43
+        {"Autumn": 0, "North": 47, "Central": 5, "South": 48},    # Decrease 3 Central 5/47/48
+        {"Autumn": 0, "North": 50, "Central": 0, "South": 50},    # No Central 0/50/50
+
+        {"Autumn": 0, "North": 38, "Central": 38, "South": 25},    # Decrease 1 South 25/37/38
+        {"Autumn": 0, "North": 43, "Central": 42, "South": 15},    # Decrease 2 South 15/42/43
+        {"Autumn": 0, "North": 48, "Central": 47, "South": 5},    # Decrease 3 South 5/47/48
+        {"Autumn": 0, "North": 50, "Central": 50, "South": 0},    # No South 50/50/0
     ]
     
     print(f"\nGenerating hauls with {len(proportions_list)} proportion(s), 10 replicates each...")
